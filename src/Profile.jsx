@@ -4,6 +4,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import AIChatBot from "./AIChatBot";
+import { SVGTreeComponent } from "./Icons";
 
 // ── Custom SVG Icons ───────────────────────────────────────────
 
@@ -521,7 +522,7 @@ const Profile = () => {
               label="CO₂ Saved"
             />
             <StatCard
-              icon={<TreeIcon size={48} />}
+              icon={<SVGTreeComponent />}
               value="14"
               label="Trees Planted"
             />

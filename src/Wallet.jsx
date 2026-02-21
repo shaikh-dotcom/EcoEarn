@@ -1,20 +1,14 @@
 import {
   LeafCoinIcon,
-  WalletNavIcon,
-  EarnNavIcon,
-  ImpactNavIcon,
-  ProfileNavIcon,
-  SettingsNavIcon,
   BkashIcon,
   NagadIcon,
   RocketIcon,
   VisaIcon,
   MastercardIcon,
 } from "./Icons";
-import { useRef } from "react";
 import { useState } from "react";
 import { auth } from "./firebase";
-import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+
 const TRANSACTIONS = [
   {
     name: "Recycled Plastic",
@@ -88,56 +82,14 @@ const PAYMENT_METHODS = [
 ];
 
 const Wallet = ({ setActivePage }) => {
-  const recaptchaVerifierRef = useRef(null);
-  const [confirmationResult, setConfirmationResult] = useState(null);
-  const [otp, setOtp] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState(null);
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
-  const [step, setStep] = useState("form"); // 1 = form, 2 = success
-  const closeModal = () => {
-    if (recaptchaVerifierRef.current) {
-      recaptchaVerifierRef.current.clear(); // ← clears the DOM widget
-      recaptchaVerifierRef.current = null;
-    }
-    setShowModal(false);
-  };
-  const sendOTP = async () => {
+  const [step, setStep] = useState("form"); // form | loading | error
+
+  const handleConfirm = async () => {
     if (!amount || !phone) return;
-
-    // Format to international format
-    const formattedPhone = "+88" + phone; // Bangladesh prefix
-
-    if (!recaptchaVerifierRef.current) {
-      recaptchaVerifierRef.current = new RecaptchaVerifier(
-        auth,
-        "recaptcha-container",
-        {
-          size: "invisible",
-        },
-      );
-    }
-
-    try {
-      const result = await signInWithPhoneNumber(
-        auth,
-        formattedPhone,
-        recaptchaVerifierRef.current,
-      );
-      setConfirmationResult(result);
-      setStep("otp"); // show OTP input
-    } catch (err) {
-      console.error(err);
-      if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear(); // ← clears the DOM widget
-        recaptchaVerifierRef.current = null;
-      }
-      setShowModal(false);
-      alert("Failed to send OTP. Check phone number.");
-    }
-  };
-  const initiatePayment = async () => {
     setStep("loading");
     try {
       const res = await fetch(
@@ -156,7 +108,7 @@ const Wallet = ({ setActivePage }) => {
       );
       const data = await res.json();
       if (data.url) {
-        window.location.href = data.url;
+        window.location.href = data.url; // SSLCommerz handles OTP itself
       } else {
         setStep("error");
       }
@@ -166,18 +118,16 @@ const Wallet = ({ setActivePage }) => {
     }
   };
 
-  const verifyOTP = async () => {
-    try {
-      await confirmationResult.confirm(otp);
-      await initiatePayment();
-    } catch (err) {
-      alert("Invalid OTP. Try again.");
-    }
+  const openModal = (method) => {
+    setSelectedMethod(method);
+    setShowModal(true);
+    setStep("form");
+    setAmount("");
+    setPhone("");
   };
+
   return (
     <div className="wallet-page">
-      {/* ── Top Nav ── */}
-      {/* ── Content ── */}
       <div className="wallet-content">
         {/* ── Balance Card ── */}
         <div className="balance-card">
@@ -205,13 +155,7 @@ const Wallet = ({ setActivePage }) => {
                 <button
                   className="withdraw-btn"
                   style={{ borderColor: method.color, color: method.color }}
-                  onClick={() => {
-                    setSelectedMethod(method);
-                    setShowModal(true);
-                    setStep("form");
-                    setAmount("");
-                    setPhone("");
-                  }}
+                  onClick={() => openModal(method)}
                 >
                   Withdraw
                 </button>
@@ -239,13 +183,16 @@ const Wallet = ({ setActivePage }) => {
           </div>
         </div>
       </div>
+
+      {/* ── Modal ── */}
       {showModal && (
-        <div className="withdraw-overlay" onClick={() => closeModal()}>
+        <div className="withdraw-overlay" onClick={() => setShowModal(false)}>
           <div
             className="withdraw-box"
             style={{ "--method-color": selectedMethod.color }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* ── Form Step ── */}
             {step === "form" && (
               <>
                 <div className="withdraw-header">
@@ -255,7 +202,7 @@ const Wallet = ({ setActivePage }) => {
                   </h3>
                   <button
                     className="withdraw-close"
-                    onClick={() => closeModal()}
+                    onClick={() => setShowModal(false)}
                   >
                     ✕
                   </button>
@@ -290,51 +237,46 @@ const Wallet = ({ setActivePage }) => {
                   />
                 </div>
 
-                <button className="withdraw-confirm-btn" onClick={sendOTP}>
+                <button
+                  className="withdraw-confirm-btn"
+                  onClick={handleConfirm}
+                >
                   Confirm Withdrawal
                 </button>
               </>
             )}
-            {step === "otp" && (
-              <>
-                <div className="withdraw-header">
-                  <h3 className="withdraw-title-text">Enter OTP</h3>
-                </div>
-                <div className="modal-body">
-                  <div className="withdraw-balance">
-                    OTP sent to <span>+88{phone}</span>
-                  </div>
-                  <label className="withdraw-label">Enter 6-digit OTP</label>
-                  <input
-                    className="withdraw-input"
-                    type="number"
-                    placeholder="e.g. 123456"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                  />
-                </div>
-                <button onClick={verifyOTP}>Verify & Withdraw</button>
-              </>
-            )}
 
+            {/* ── Loading Step ── */}
             {step === "loading" && (
               <div className="withdraw-success">
-                <div className="spinner"></div>
+                <div className="spinner" />
                 <p>Connecting to Gateway...</p>
               </div>
             )}
+
+            {/* ── Error Step ── */}
             {step === "error" && (
               <div className="withdraw-success">
-                <div className="error-icon">❌</div>
-                <h3>Connection Failed</h3>
-                <button onClick={() => setStep("form")}>Try Again</button>
+                <div style={{ fontSize: "2.5rem" }}>❌</div>
+                <h3 style={{ fontFamily: "Orbitron", color: "#ff4d6d" }}>
+                  Connection Failed
+                </h3>
+                <p style={{ color: "#a0c4aa", fontSize: "0.85rem" }}>
+                  Please try again.
+                </p>
+                <button
+                  className="withdraw-confirm-btn"
+                  onClick={() => setStep("form")}
+                >
+                  Try Again
+                </button>
               </div>
             )}
           </div>
         </div>
       )}
-      <div id="recaptcha-container"></div>
     </div>
   );
 };
+
 export default Wallet;
